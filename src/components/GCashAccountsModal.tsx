@@ -1,17 +1,21 @@
-import React from 'react';
+import { Ionicons } from '@expo/vector-icons';
+import React, { useEffect, useRef } from 'react';
 import {
+    Animated,
     Modal,
     Platform,
+    Pressable,
     ScrollView,
     StyleSheet,
     Text,
     TouchableOpacity,
     View,
 } from 'react-native';
-import COLORS from '../../constants/colors';
+import { COLORS } from '../../constants/colors';
+import TYPOGRAPHY from '../../constants/typography';
 
 interface GCashAccount {
-    id: number;
+    id: string;
     name: string;
     balance: number;
     percentage: number;
@@ -24,6 +28,8 @@ interface GCashAccountsModalProps {
     totalBalance: number;
     onClose: () => void;
     lastUpdated?: string;
+    onCashIn: (accountId: string) => void;
+    onCashOut: (accountId: string) => void;
 }
 
 export default function GCashAccountsModal({
@@ -32,111 +38,169 @@ export default function GCashAccountsModal({
     totalBalance,
     onClose,
     lastUpdated,
+    onCashIn,
+    onCashOut,
 }: GCashAccountsModalProps) {
-    const activeAccounts = accounts.filter(acc => acc.status === 'active');
+    const slideAnim = useRef(new Animated.Value(0)).current;
+    const backdropAnim = useRef(new Animated.Value(0)).current;
 
-    const getAccountStyle = (status: string) => {
+    useEffect(() => {
+        if (!visible) return;
+
+        slideAnim.setValue(0);
+        backdropAnim.setValue(0);
+
+        Animated.parallel([
+            Animated.timing(backdropAnim, {
+                toValue: 1,
+                duration: 220,
+                useNativeDriver: true,
+            }),
+            Animated.spring(slideAnim, {
+                toValue: 1,
+                useNativeDriver: true,
+                damping: 22,
+                stiffness: 210,
+            }),
+        ]).start();
+    }, [backdropAnim, slideAnim, visible]);
+
+    const translateY = slideAnim.interpolate({
+        inputRange: [0, 1],
+        outputRange: [420, 0],
+    });
+
+    const getAccountStyle = (status: GCashAccount['status']) => {
         switch (status) {
             case 'low':
                 return {
-                    container: styles.accountWarning,
-                    icon: '⚠️',
-                    iconBg: styles.iconWarning,
+                    container: styles.accountLow,
+                    balance: styles.balanceLow,
+                    pill: styles.lowBadge,
+                    pillText: styles.lowBadgeText,
+                    pillLabel: 'Low',
+                    accent: COLORS.warning,
+                    cashInBackground: '#FFF5D6',
                 };
             case 'empty':
                 return {
-                    container: styles.accountDanger,
-                    icon: '⚠️',
-                    iconBg: styles.iconDanger,
+                    container: styles.accountEmpty,
+                    balance: styles.balanceEmpty,
+                    pill: styles.emptyBadge,
+                    pillText: styles.emptyBadgeText,
+                    pillLabel: 'Empty',
+                    accent: COLORS.danger,
+                    cashInBackground: '#FFEAE5',
                 };
             default:
                 return {
-                    container: styles.accountSuccess,
-                    icon: '✓',
-                    iconBg: styles.iconSuccess,
+                    container: styles.accountActive,
+                    balance: styles.balanceActive,
+                    pill: null,
+                    pillText: null,
+                    pillLabel: '',
+                    accent: COLORS.success,
+                    cashInBackground: COLORS.successLight,
                 };
         }
     };
 
+    const handleAction = (type: 'cash_in' | 'cash_out', accountId: string) => {
+        onClose();
+        setTimeout(() => {
+            if (type === 'cash_in') {
+                onCashIn(accountId);
+            } else {
+                onCashOut(accountId);
+            }
+        }, 180);
+    };
+
     return (
-        <Modal
-            visible={visible}
-            transparent
-            animationType="fade"
-            onRequestClose={onClose}
-        >
+        <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
             <View style={styles.overlay}>
-                <View style={styles.modalContainer}>
-                    {/* Header */}
+                <Animated.View
+                    style={[
+                        styles.backdrop,
+                        {
+                            opacity: backdropAnim.interpolate({
+                                inputRange: [0, 1],
+                                outputRange: [0, 0.42],
+                            }),
+                        },
+                    ]}
+                >
+                    <Pressable style={StyleSheet.absoluteFillObject} onPress={onClose} />
+                </Animated.View>
+
+                <Animated.View style={[styles.sheet, { transform: [{ translateY }] }]}>
+                    <View style={styles.handle} />
+
                     <View style={styles.header}>
                         <View>
                             <Text style={styles.title}>GCash Accounts</Text>
-                            {lastUpdated && (
-                                <Text style={styles.subtitle}>
-                                    Last updated: {lastUpdated}
-                                </Text>
-                            )}
+                            {lastUpdated ? <Text style={styles.subtitle}>Last updated: {lastUpdated}</Text> : null}
                         </View>
-                        <TouchableOpacity
-                            onPress={onClose}
-                            style={styles.closeButton}
-                        >
-                            <Text style={styles.closeIcon}>✕</Text>
+                        <TouchableOpacity style={styles.closeButton} onPress={onClose} activeOpacity={0.7}>
+                            <Ionicons name="close" size={24} color={COLORS.textSecondary} />
                         </TouchableOpacity>
                     </View>
 
-                    <ScrollView
-                        style={styles.scrollView}
-                        showsVerticalScrollIndicator={false}
-                    >
-                        {/* Total Balance */}
-                        <View style={styles.totalBalanceCard}>
-                            <Text style={styles.totalBalanceLabel}>
-                                Total GCash Balance
-                            </Text>
-                            <Text style={styles.totalBalanceAmount}>
-                                ₱{totalBalance.toLocaleString()}
-                            </Text>
-                            <Text style={styles.activeAccountsText}>
-                                {activeAccounts.length} active account
-                                {activeAccounts.length !== 1 ? 's' : ''}
-                            </Text>
+                    <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+                        <View style={styles.totalCard}>
+                            <View>
+                                <Text style={styles.totalLabel}>Total GCash Balance</Text>
+                                <Text style={styles.totalMeta}>{accounts.length} active accounts</Text>
+                            </View>
+                            <Text style={styles.totalAmount}>P{totalBalance.toLocaleString()}</Text>
                         </View>
 
-                        {/* Accounts List */}
                         <View style={styles.accountsList}>
                             {accounts.map((account) => {
                                 const accountStyle = getAccountStyle(account.status);
+
                                 return (
-                                    <View
-                                        key={account.id}
-                                        style={[
-                                            styles.accountCard,
-                                            accountStyle.container,
-                                        ]}
-                                    >
-                                        <View style={styles.accountInfo}>
-                                            <Text style={styles.accountName}>
-                                                {account.name}
-                                            </Text>
-                                            <View style={styles.accountDetails}>
-                                                <Text style={styles.accountBalance}>
-                                                    ₱{account.balance.toLocaleString()}
-                                                </Text>
-                                                <Text style={styles.accountPercentage}>
-                                                    {account.percentage.toFixed(1)}%
-                                                </Text>
+                                    <View key={account.id} style={[styles.accountCard, accountStyle.container]}>
+                                        <View style={styles.accountHeaderRow}>
+                                            <View style={styles.accountHeaderLeft}>
+                                                <Text style={styles.accountName}>{account.name}</Text>
+                                                {accountStyle.pill ? (
+                                                    <View style={accountStyle.pill}>
+                                                        <Text style={accountStyle.pillText}>{accountStyle.pillLabel}</Text>
+                                                    </View>
+                                                ) : null}
                                             </View>
                                         </View>
-                                        {account.status === 'low' && (
-                                            <View style={styles.lowBadge}>
-                                                <Text style={styles.lowBadgeText}>Low</Text>
-                                            </View>
-                                        )}
-                                        <View style={[styles.iconContainer, accountStyle.iconBg]}>
-                                            <Text style={styles.iconText}>
-                                                {accountStyle.icon}
+
+                                        <View style={styles.accountNumbersRow}>
+                                            <Text style={[styles.accountBalance, accountStyle.balance]}>
+                                                P{account.balance.toLocaleString()}
                                             </Text>
+                                            <Text style={styles.accountPercentage}>{account.percentage.toFixed(1)}%</Text>
+                                        </View>
+
+                                        <View style={styles.actionsRow}>
+                                            <TouchableOpacity
+                                                style={[
+                                                    styles.actionButton,
+                                                    styles.cashInButton,
+                                                    { backgroundColor: accountStyle.cashInBackground },
+                                                ]}
+                                                activeOpacity={0.82}
+                                                onPress={() => handleAction('cash_in', account.id)}
+                                            >
+                                                <Ionicons name="arrow-up-circle-outline" size={16} color={accountStyle.accent} />
+                                                <Text style={[styles.actionButtonText, { color: accountStyle.accent }]}>Cash In</Text>
+                                            </TouchableOpacity>
+
+                                            <TouchableOpacity
+                                                style={[styles.actionButton, styles.cashOutButton]}
+                                                activeOpacity={0.82}
+                                                onPress={() => handleAction('cash_out', account.id)}
+                                            >
+                                                <Ionicons name="arrow-down-circle-outline" size={16} color={COLORS.danger} />
+                                                <Text style={[styles.actionButtonText, styles.cashOutButtonText]}>Cash Out</Text>
+                                            </TouchableOpacity>
                                         </View>
                                     </View>
                                 );
@@ -144,14 +208,10 @@ export default function GCashAccountsModal({
                         </View>
                     </ScrollView>
 
-                    {/* Close Button */}
-                    <TouchableOpacity
-                        onPress={onClose}
-                        style={styles.closeBottomButton}
-                    >
+                    <TouchableOpacity onPress={onClose} style={styles.closeBottomButton} activeOpacity={0.78}>
                         <Text style={styles.closeBottomButtonText}>Close</Text>
                     </TouchableOpacity>
-                </View>
+                </Animated.View>
             </View>
         </Modal>
     );
@@ -160,45 +220,56 @@ export default function GCashAccountsModal({
 const styles = StyleSheet.create({
     overlay: {
         flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
         justifyContent: 'flex-end',
-        ...Platform.select({
-            web: {
-                justifyContent: 'center',
-                alignItems: 'center',
-            },
-        }),
     },
-    modalContainer: {
+    backdrop: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: COLORS.black,
+    },
+    sheet: {
         backgroundColor: COLORS.white,
-        borderTopLeftRadius: 24,
-        borderTopRightRadius: 24,
-        maxHeight: '90%',
+        borderTopLeftRadius: 28,
+        borderTopRightRadius: 28,
+        maxHeight: '88%',
         ...Platform.select({
             web: {
-                borderRadius: 16,
                 width: '90%',
                 maxWidth: 500,
                 maxHeight: '80%',
+                alignSelf: 'center',
+                marginBottom: 24,
+                borderRadius: 22,
             },
         }),
+    },
+    handle: {
+        width: 44,
+        height: 5,
+        borderRadius: 999,
+        backgroundColor: COLORS.border,
+        alignSelf: 'center',
+        marginTop: 10,
+        marginBottom: 6,
     },
     header: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'flex-start',
-        padding: 20,
+        paddingHorizontal: 20,
+        paddingTop: 12,
+        paddingBottom: 18,
         borderBottomWidth: 1,
         borderBottomColor: COLORS.border,
     },
     title: {
         fontSize: 20,
-        fontWeight: '700',
+        fontFamily: TYPOGRAPHY.bold,
         color: COLORS.textPrimary,
         marginBottom: 4,
     },
     subtitle: {
         fontSize: 13,
+        fontFamily: TYPOGRAPHY.medium,
         color: COLORS.textSecondary,
     },
     closeButton: {
@@ -207,121 +278,159 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
     },
-    closeIcon: {
-        fontSize: 24,
-        color: COLORS.textSecondary,
-    },
     scrollView: {
+        flexGrow: 0,
+    },
+    scrollContent: {
         padding: 20,
     },
-    totalBalanceCard: {
-        backgroundColor: COLORS.primaryLight + '20',
-        borderRadius: 12,
-        padding: 20,
+    totalCard: {
+        backgroundColor: '#EEF1FF',
+        borderRadius: 18,
+        padding: 18,
         marginBottom: 20,
-    },
-    totalBalanceLabel: {
-        fontSize: 13,
-        color: COLORS.primary,
-        fontWeight: '600',
-        marginBottom: 8,
-    },
-    totalBalanceAmount: {
-        fontSize: 32,
-        fontWeight: '700',
-        color: COLORS.primary,
-        marginBottom: 8,
-    },
-    activeAccountsText: {
-        fontSize: 13,
-        color: COLORS.primary,
-    },
-    accountsList: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
         gap: 12,
     },
-    accountCard: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        padding: 16,
-        borderRadius: 12,
-        borderWidth: 1,
+    totalLabel: {
+        fontSize: 13,
+        fontFamily: TYPOGRAPHY.medium,
+        color: COLORS.primary,
+        marginBottom: 8,
     },
-    accountSuccess: {
+    totalMeta: {
+        fontSize: 13,
+        fontFamily: TYPOGRAPHY.medium,
+        color: COLORS.primary,
+    },
+    totalAmount: {
+        fontSize: 24,
+        fontFamily: TYPOGRAPHY.extraBold,
+        color: COLORS.primaryDark,
+    },
+    accountsList: {
+        gap: 14,
+    },
+    accountCard: {
+        borderRadius: 18,
+        borderWidth: 1,
+        padding: 18,
+        gap: 14,
+    },
+    accountActive: {
         backgroundColor: COLORS.white,
         borderColor: COLORS.border,
     },
-    accountWarning: {
-        backgroundColor: COLORS.warningLight,
-        borderColor: COLORS.warning + '40',
+    accountLow: {
+        backgroundColor: '#FFF9E8',
+        borderColor: '#F5D97D',
     },
-    accountDanger: {
-        backgroundColor: COLORS.dangerLight,
-        borderColor: COLORS.danger + '40',
+    accountEmpty: {
+        backgroundColor: '#FFF4F2',
+        borderColor: '#F5C0B6',
     },
-    accountInfo: {
-        flex: 1,
+    accountHeaderRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
     },
-    accountName: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: COLORS.textPrimary,
-        marginBottom: 6,
-    },
-    accountDetails: {
+    accountHeaderLeft: {
         flexDirection: 'row',
         alignItems: 'center',
+        flexWrap: 'wrap',
+        gap: 8,
+    },
+    accountName: {
+        fontSize: 17,
+        fontFamily: TYPOGRAPHY.bold,
+        color: COLORS.textPrimary,
+    },
+    accountNumbersRow: {
+        flexDirection: 'row',
+        alignItems: 'baseline',
         gap: 8,
     },
     accountBalance: {
         fontSize: 18,
-        fontWeight: '700',
+        fontFamily: TYPOGRAPHY.extraBold,
+    },
+    balanceActive: {
         color: COLORS.textPrimary,
+    },
+    balanceLow: {
+        color: COLORS.warningDark,
+    },
+    balanceEmpty: {
+        color: COLORS.dangerDark,
     },
     accountPercentage: {
         fontSize: 13,
+        fontFamily: TYPOGRAPHY.medium,
         color: COLORS.textSecondary,
     },
     lowBadge: {
-        backgroundColor: COLORS.warning,
-        paddingHorizontal: 8,
-        paddingVertical: 2,
-        borderRadius: 4,
-        marginRight: 8,
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 999,
+        backgroundColor: '#FFF1CC',
     },
     lowBadgeText: {
         fontSize: 11,
-        fontWeight: '600',
-        color: COLORS.white,
+        fontFamily: TYPOGRAPHY.semibold,
+        color: COLORS.warningDark,
     },
-    iconContainer: {
-        width: 36,
-        height: 36,
-        borderRadius: 18,
+    emptyBadge: {
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 999,
+        backgroundColor: '#FFE2DB',
+    },
+    emptyBadgeText: {
+        fontSize: 11,
+        fontFamily: TYPOGRAPHY.semibold,
+        color: COLORS.dangerDark,
+    },
+    actionsRow: {
+        flexDirection: 'row',
+        gap: 10,
+    },
+    actionButton: {
+        flex: 1,
+        minHeight: 42,
+        borderRadius: 12,
+        flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
+        gap: 8,
+        paddingHorizontal: 10,
     },
-    iconSuccess: {
-        backgroundColor: COLORS.successLight,
+    cashInButton: {
+        borderWidth: 1,
+        borderColor: 'rgba(22, 163, 74, 0.14)',
     },
-    iconWarning: {
-        backgroundColor: COLORS.warning + '20',
+    cashOutButton: {
+        backgroundColor: COLORS.dangerLight,
     },
-    iconDanger: {
-        backgroundColor: COLORS.danger + '20',
+    actionButtonText: {
+        fontSize: 13,
+        fontFamily: TYPOGRAPHY.semibold,
     },
-    iconText: {
-        fontSize: 16,
+    cashOutButtonText: {
+        color: COLORS.danger,
     },
     closeBottomButton: {
         margin: 20,
-        backgroundColor: COLORS.background,
-        borderRadius: 8,
+        backgroundColor: '#F3F4F8',
+        borderRadius: 14,
         paddingVertical: 14,
         alignItems: 'center',
     },
     closeBottomButtonText: {
         fontSize: 16,
-        fontWeight: '600',
+        fontFamily: TYPOGRAPHY.semibold,
         color: COLORS.textPrimary,
     },
 });
+

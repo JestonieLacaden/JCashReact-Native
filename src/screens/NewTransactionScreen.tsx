@@ -14,6 +14,7 @@ import {
     View,
 } from 'react-native';
 import { COLORS } from '../../constants/colors';
+import TYPOGRAPHY from '../../constants/typography';
 import AppHeader from '../components/AppHeader';
 import { FeeService } from '../services/FeeService';
 import { GcashAccountService } from '../services/GcashAccountService';
@@ -31,9 +32,10 @@ const TYPE_OPTIONS: { value: TransactionTypeOption; label: string }[] = [
 // ─── Props (optional initial type from route params) ─────────
 interface Props {
     initialType?: TransactionTypeOption;
+    initialAccountId?: string;
 }
 
-export default function NewTransactionScreen({ initialType }: Props) {
+export default function NewTransactionScreen({ initialType, initialAccountId }: Props) {
     const router = useRouter();
 
     // ── Form state ──────────────────────────────────────────
@@ -41,6 +43,9 @@ export default function NewTransactionScreen({ initialType }: Props) {
         initialType || 'cash_in',
     );
     const [showTypePicker, setShowTypePicker] = useState(false);
+
+    // ── Track focused field for border highlight ────────
+    const [focusedField, setFocusedField] = useState<string | null>(null);
     const [gcashAccounts, setGcashAccounts] = useState<GcashAccount[]>([]);
     const [selectedAccount, setSelectedAccount] = useState<GcashAccount | null>(null);
     const [showAccountPicker, setShowAccountPicker] = useState(false);
@@ -60,10 +65,17 @@ export default function NewTransactionScreen({ initialType }: Props) {
     // ── Dropdown animation ──────────────────────────────────
     const [typeDropdownAnim] = useState(new Animated.Value(0));
 
+    // ── Sync type when navigating from bottom sheet ────────
+    useEffect(() => {
+        if (initialType) {
+            setTransactionType(initialType);
+        }
+    }, [initialType]);
+
     // ── Load GCash accounts on mount ────────────────────────
     useEffect(() => {
         loadGCashAccounts();
-    }, []);
+    }, [initialAccountId]);
 
     // ── Auto-calculate fee (tier-based) ─────────────────────
     useEffect(() => {
@@ -89,7 +101,12 @@ export default function NewTransactionScreen({ initialType }: Props) {
         try {
             const accounts = GcashAccountService.getActiveAccounts();
             setGcashAccounts(accounts);
-            if (accounts.length > 0) setSelectedAccount(accounts[0]);
+            if (accounts.length > 0) {
+                const matchedAccount = initialAccountId
+                    ? accounts.find((account) => account.id === initialAccountId)
+                    : null;
+                setSelectedAccount(matchedAccount || accounts[0]);
+            }
         } catch (error) {
             console.error('Error loading GCash accounts:', error);
             Alert.alert('Error', 'Failed to load GCash accounts');
@@ -303,11 +320,13 @@ export default function NewTransactionScreen({ initialType }: Props) {
                 <View style={styles.fieldContainer}>
                     <Text style={styles.label}>Customer Cellphone No. (optional)</Text>
                     <TextInput
-                        style={styles.input}
+                        style={[styles.input, focusedField === 'phone' && styles.inputFocused]}
                         placeholder="09XX XXX XXXX"
                         placeholderTextColor="#9CA3AF"
                         value={customerPhone}
                         onChangeText={setCustomerPhone}
+                        onFocus={() => setFocusedField('phone')}
+                        onBlur={() => setFocusedField(null)}
                         keyboardType="phone-pad"
                     />
                 </View>
@@ -316,11 +335,13 @@ export default function NewTransactionScreen({ initialType }: Props) {
                 <View style={styles.fieldContainer}>
                     <Text style={styles.label}>Customer Name (optional)</Text>
                     <TextInput
-                        style={styles.input}
+                        style={[styles.input, focusedField === 'name' && styles.inputFocused]}
                         placeholder="Juan Dela Cruz"
                         placeholderTextColor="#9CA3AF"
                         value={customerName}
                         onChangeText={setCustomerName}
+                        onFocus={() => setFocusedField('name')}
+                        onBlur={() => setFocusedField(null)}
                         autoCapitalize="words"
                     />
                 </View>
@@ -329,12 +350,16 @@ export default function NewTransactionScreen({ initialType }: Props) {
                 <View style={styles.fieldContainer}>
                     <Text style={styles.label}>Amount</Text>
                     <TextInput
-                        style={[styles.input, amountError ? styles.inputError : null]}
+                        style={[styles.input, focusedField === 'amount' && styles.inputFocused, amountError ? styles.inputError : null]}
                         placeholder="Enter amount"
                         placeholderTextColor="#9CA3AF"
                         value={amount}
-                        onChangeText={setAmount}
-                        onBlur={validateAmount}
+                        onChangeText={(text) => {
+                            setAmount(text);
+                            if (amountError) setAmountError(''); // Clear error while typing
+                        }}
+                        onFocus={() => setFocusedField('amount')}
+                        onBlur={() => setFocusedField(null)}
                         keyboardType="decimal-pad"
                     />
                     {amountError ? (
@@ -346,11 +371,13 @@ export default function NewTransactionScreen({ initialType }: Props) {
                 <View style={styles.fieldContainer}>
                     <Text style={styles.label}>Fee</Text>
                     <TextInput
-                        style={styles.input}
+                        style={[styles.input, focusedField === 'fee' && styles.inputFocused]}
                         placeholder="0"
                         placeholderTextColor="#9CA3AF"
                         value={fee}
                         onChangeText={setFee}
+                        onFocus={() => setFocusedField('fee')}
+                        onBlur={() => setFocusedField(null)}
                         keyboardType="decimal-pad"
                     />
                 </View>
@@ -373,11 +400,13 @@ export default function NewTransactionScreen({ initialType }: Props) {
                 <View style={styles.fieldContainer}>
                     <Text style={styles.label}>Reference (optional)</Text>
                     <TextInput
-                        style={styles.input}
+                        style={[styles.input, focusedField === 'reference' && styles.inputFocused]}
                         placeholder=""
                         placeholderTextColor="#9CA3AF"
                         value={reference}
                         onChangeText={setReference}
+                        onFocus={() => setFocusedField('reference')}
+                        onBlur={() => setFocusedField(null)}
                         autoCapitalize="characters"
                     />
                 </View>
@@ -386,11 +415,13 @@ export default function NewTransactionScreen({ initialType }: Props) {
                 <View style={styles.fieldContainer}>
                     <Text style={styles.label}>Remarks</Text>
                     <TextInput
-                        style={[styles.input, styles.textArea]}
+                        style={[styles.input, styles.textArea, focusedField === 'remarks' && styles.inputFocused]}
                         placeholder=""
                         placeholderTextColor="#9CA3AF"
                         value={remarks}
                         onChangeText={setRemarks}
+                        onFocus={() => setFocusedField('remarks')}
+                        onBlur={() => setFocusedField(null)}
                         multiline
                         numberOfLines={3}
                     />
@@ -490,7 +521,7 @@ const styles = StyleSheet.create({
 
     pageTitle: {
         fontSize: 22,
-        fontWeight: '700',
+        fontFamily: TYPOGRAPHY.bold,
         color: '#111827',
         marginBottom: 24,
     },
@@ -501,7 +532,7 @@ const styles = StyleSheet.create({
     },
     label: {
         fontSize: 13,
-        fontWeight: '500',
+        fontFamily: TYPOGRAPHY.medium,
         color: COLORS.primary,
         marginBottom: 6,
     },
@@ -513,7 +544,12 @@ const styles = StyleSheet.create({
         paddingHorizontal: 14,
         paddingVertical: 12,
         fontSize: 15,
+        fontFamily: TYPOGRAPHY.regular,
         color: '#111827',
+    },
+    inputFocused: {
+        borderColor: COLORS.primary,
+        borderWidth: 2,
     },
     inputError: {
         borderColor: COLORS.danger,
@@ -541,10 +577,12 @@ const styles = StyleSheet.create({
     },
     selectButtonText: {
         fontSize: 15,
+        fontFamily: TYPOGRAPHY.regular,
         color: '#111827',
     },
     selectPlaceholder: {
         fontSize: 15,
+        fontFamily: TYPOGRAPHY.regular,
         color: '#9CA3AF',
     },
     selectArrow: {
@@ -583,11 +621,12 @@ const styles = StyleSheet.create({
     },
     dropdownItemText: {
         fontSize: 14,
+        fontFamily: TYPOGRAPHY.regular,
         color: '#374151',
     },
     dropdownItemTextActive: {
         color: COLORS.primary,
-        fontWeight: '600',
+        fontFamily: TYPOGRAPHY.semibold,
     },
 
     /* Checkbox */
@@ -617,6 +656,7 @@ const styles = StyleSheet.create({
     },
     checkboxLabel: {
         fontSize: 14,
+        fontFamily: TYPOGRAPHY.regular,
         color: '#374151',
     },
 
@@ -624,6 +664,7 @@ const styles = StyleSheet.create({
     errorText: {
         color: COLORS.danger,
         fontSize: 12,
+        fontFamily: TYPOGRAPHY.medium,
         marginTop: 4,
     },
 
@@ -646,7 +687,7 @@ const styles = StyleSheet.create({
     },
     cancelButtonText: {
         fontSize: 15,
-        fontWeight: '600',
+        fontFamily: TYPOGRAPHY.semibold,
         color: '#374151',
     },
     saveButton: {
@@ -661,7 +702,7 @@ const styles = StyleSheet.create({
     },
     saveButtonText: {
         fontSize: 15,
-        fontWeight: '600',
+        fontFamily: TYPOGRAPHY.semibold,
         color: '#fff',
     },
 
@@ -694,7 +735,7 @@ const styles = StyleSheet.create({
     },
     pickerTitle: {
         fontSize: 17,
-        fontWeight: '600',
+        fontFamily: TYPOGRAPHY.semibold,
         color: '#111827',
     },
     pickerClose: {
@@ -718,18 +759,20 @@ const styles = StyleSheet.create({
     },
     pickerItemName: {
         fontSize: 15,
-        fontWeight: '600',
+        fontFamily: TYPOGRAPHY.semibold,
         color: '#111827',
     },
     pickerItemNumber: {
         fontSize: 12,
+        fontFamily: TYPOGRAPHY.regular,
         color: '#6B7280',
         marginTop: 2,
     },
     pickerItemBadge: {
         fontSize: 12,
-        fontWeight: '500',
+        fontFamily: TYPOGRAPHY.medium,
         color: COLORS.primary,
         textTransform: 'capitalize',
     },
 });
+

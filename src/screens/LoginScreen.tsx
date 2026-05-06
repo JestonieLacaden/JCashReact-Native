@@ -18,7 +18,7 @@ import { useAuthStore } from '../store/authStore';
 
 export default function LoginScreen() {
     const router = useRouter();
-    const { login, isAuthenticated, isLoading, error, clearError, loadUser } = useAuthStore();
+    const { login, loginWithGoogle, isAuthenticated, isLoading, error, clearError, loadUser } = useAuthStore();
 
     const [emailOrUsername, setEmailOrUsername] = useState('');
     const [password, setPassword] = useState('');
@@ -104,6 +104,16 @@ export default function LoginScreen() {
         }
     };
 
+    const handleGoogleLogin = async () => {
+        clearError();
+
+        try {
+            await loginWithGoogle();
+        } catch (err) {
+            console.error('Google login error:', err);
+        }
+    };
+
     return (
         <KeyboardAvoidingView
             style={styles.container}
@@ -130,6 +140,27 @@ export default function LoginScreen() {
 
                     {/* Form */}
                     <View style={styles.form}>
+                        <TouchableOpacity
+                            style={[
+                                styles.googleButton,
+                                isLoading && styles.loginButtonDisabled,
+                            ]}
+                            onPress={handleGoogleLogin}
+                            disabled={isLoading}
+                            activeOpacity={0.8}
+                        >
+                            <View style={styles.googleIcon}>
+                                <Text style={styles.googleIconText}>G</Text>
+                            </View>
+                            <Text style={styles.googleButtonText}>Continue with Google</Text>
+                        </TouchableOpacity>
+
+                        <View style={styles.dividerRow}>
+                            <View style={styles.dividerLine} />
+                            <Text style={styles.dividerText}>or use local login</Text>
+                            <View style={styles.dividerLine} />
+                        </View>
+
                         {/* Email/Username Input */}
                         <View style={styles.inputContainer}>
                             <TextInput
@@ -276,6 +307,53 @@ const styles = StyleSheet.create({
     },
     form: {
         paddingHorizontal: 0,
+    },
+    googleButton: {
+        minHeight: 52,
+        backgroundColor: COLORS.white,
+        borderWidth: 1,
+        borderColor: COLORS.border,
+        borderRadius: 8,
+        paddingHorizontal: 16,
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexDirection: 'row',
+        marginBottom: 18,
+    },
+    googleIcon: {
+        width: 24,
+        height: 24,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: COLORS.border,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 10,
+    },
+    googleIconText: {
+        color: COLORS.textPrimary,
+        fontSize: 14,
+        fontWeight: '700',
+    },
+    googleButtonText: {
+        color: COLORS.textPrimary,
+        fontSize: 15,
+        fontWeight: '600',
+    },
+    dividerRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 20,
+    },
+    dividerLine: {
+        flex: 1,
+        height: 1,
+        backgroundColor: COLORS.border,
+    },
+    dividerText: {
+        color: COLORS.textTertiary,
+        fontSize: 12,
+        marginHorizontal: 10,
     },
     inputContainer: {
         marginBottom: 20,

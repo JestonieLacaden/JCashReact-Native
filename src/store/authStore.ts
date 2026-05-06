@@ -1,15 +1,20 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import Constants from "expo-constants";
 import { Platform } from "react-native";
 import { create } from "zustand";
 import { db } from "../database/database";
 
 export interface User {
-  id?: number;
+  id?: number | string;
   name: string;
   email: string;
   role: string;
   token: string;
+  photoURL?: string | null;
 }
+
+const canUseNativeFirebase =
+  Platform.OS !== "web" && Constants.appOwnership !== "expo";
 
 interface AuthState {
   user: User | null;
@@ -19,6 +24,7 @@ interface AuthState {
 
   // Actions
   login: (email: string, password: string) => Promise<void>;
+  loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
   loadUser: () => Promise<void>;
   setUser: (user: User | null) => void;
@@ -35,7 +41,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
    * Login user with email and password
    * Checks against local SQLite database (OFFLINE-FIRST)
    */
-  login: async (email: string, password: string) => {
+  login: async (emailOrUsername: string, password: string) => {
     set({ isLoading: true, error: null });
 
     try {
@@ -43,10 +49,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         throw new Error("Web platform not supported for offline-first mode");
       }
 
-      // Query local SQLite database
+      // Query local SQLite database - check both email AND username
       const rows: any[] = db.getAllSync(
-        "SELECT * FROM users WHERE email = ? LIMIT 1;",
-        [email],
+        "SELECT * FROM users WHERE email = ? OR username = ? LIMIT 1;",
+        [emailOrUsername, emailOrUsername],
       );
 
       if (rows.length === 0) {
@@ -100,6 +106,48 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
+  loginWithGoogle: async () => {
+    set({ isLoading: true, error: null });
+
+    try {
+      if (!canUseNativeFirebase) {
+        throw new Error(
+          "Google sign-in requires an Android development build. Run npm run android instead of Expo Go.",
+        );
+      }
+
+      const { signInWithGoogle } = await import("../services/firebaseAuth");
+      const user = await signInWithGoogle();
+
+      if (!user) {
+        set({ isLoading: false });
+        return;
+      }
+
+      await AsyncStorage.setItem("auth_token", user.token);
+      await AsyncStorage.setItem("user_data", JSON.stringify(user));
+
+      set({
+        user,
+        isAuthenticated: true,
+        isLoading: false,
+        error: null,
+      });
+
+      console.log("[AuthStore] Google login successful");
+    } catch (error: any) {
+      const errorMessage = error.message || "Google login failed";
+      set({
+        error: errorMessage,
+        isLoading: false,
+        isAuthenticated: false,
+        user: null,
+      });
+      console.error("[AuthStore] Google login error:", errorMessage);
+      throw error;
+    }
+  },
+
   /**
    * Logout user
    * Clears token and AsyncStorage (OFFLINE-FIRST)
@@ -108,6 +156,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ isLoading: true });
 
     try {
+      if (canUseNativeFirebase) {
+        const { signOutFromFirebase } = await import("../services/firebaseAuth");
+        await signOutFromFirebase();
+      }
+
       // Clear from AsyncStorage
       await AsyncStorage.removeItem("auth_token");
       await AsyncStorage.removeItem("user_data");
@@ -152,6 +205,23 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         });
         console.log("[AuthStore] User loaded from AsyncStorage");
         return;
+      }
+
+      if (canUseNativeFirebase) {
+        const { getCurrentFirebaseUser } = await import("../services/firebaseAuth");
+        const firebaseUser = await getCurrentFirebaseUser();
+        if (firebaseUser) {
+          await AsyncStorage.setItem("auth_token", firebaseUser.token);
+          await AsyncStorage.setItem("user_data", JSON.stringify(firebaseUser));
+
+          set({
+            user: firebaseUser,
+            isAuthenticated: true,
+            isLoading: false,
+          });
+          console.log("[AuthStore] User loaded from Firebase auth");
+          return;
+        }
       }
 
       // Fallback to SQLite if available

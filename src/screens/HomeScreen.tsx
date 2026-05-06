@@ -1,4 +1,6 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
+import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
     Platform,
@@ -10,14 +12,13 @@ import {
     View,
 } from 'react-native';
 import { COLORS } from '../../constants/colors';
+import TYPOGRAPHY from '../../constants/typography';
 import AppHeader from '../components/AppHeader';
 import DashboardSkeleton from '../components/DashboardSkeleton';
-import FloatingActionButton from '../components/FloatingActionButton';
 import GCashAccountsModal from '../components/GCashAccountsModal';
 import SyncStatusBar from '../components/SyncStatusBar';
 import { BalanceCalculator } from '../services/BalanceCalculator';
 import { GcashAccountService } from '../services/GcashAccountService';
-import { useAuthStore } from '../store/authStore';
 
 interface DashboardStats {
     totalGcash: number;
@@ -27,7 +28,7 @@ interface DashboardStats {
 }
 
 interface GCashAccount {
-    id: number;
+    id: string;
     name: string;
     balance: number;
     percentage: number;
@@ -35,10 +36,7 @@ interface GCashAccount {
 }
 
 export default function HomeScreen() {
-    const { user } = useAuthStore();
-    const isAdmin = user?.role === 'admin';
-    const isStaff = user?.role === 'staff';
-    const canManageTransactions = isAdmin || isStaff;
+    const router = useRouter();
 
     const [stats, setStats] = useState<DashboardStats>({
         totalGcash: 0,
@@ -57,7 +55,6 @@ export default function HomeScreen() {
         }
 
         try {
-            // Get balances from BalanceCalculator (transaction-based)
             const cashResult = await BalanceCalculator.getCashBalance();
             const totalGcashResult = await BalanceCalculator.getTotalGcashBalance();
             const totalCapitalResult = await BalanceCalculator.getTotalCapital();
@@ -70,26 +67,24 @@ export default function HomeScreen() {
                 tuboToday: tuboResult.balance,
             });
 
-            // Get GCash accounts with calculated balances
             const accounts = GcashAccountService.getActiveAccounts();
-            const accountsWithBalance = accounts.map(async (account, index) => {
+            const accountsWithBalance = accounts.map(async (account) => {
                 const balanceResult = await BalanceCalculator.getGcashBalance(account.id);
                 const balance = balanceResult.balance;
                 const percentage = totalGcashResult.balance > 0
                     ? (balance / totalGcashResult.balance) * 100
                     : 0;
 
-                // Determine status
                 let status: 'active' | 'low' | 'empty' = 'active';
                 if (balance === 0) status = 'empty';
                 else if (balance < 5000) status = 'low';
 
                 return {
-                    id: index + 1, // Use numeric ID for UI
+                    id: account.id,
                     name: account.name,
-                    balance: balance,
-                    percentage: percentage,
-                    status: status,
+                    balance,
+                    percentage,
+                    status,
                 };
             });
             const resolvedAccounts = await Promise.all(accountsWithBalance);
@@ -98,7 +93,6 @@ export default function HomeScreen() {
             console.error('Error loading dashboard:', error);
         } finally {
             if (showLoader) {
-                // Show skeleton for minimum 600ms for smooth UX
                 setTimeout(() => {
                     setIsLoading(false);
                 }, 600);
@@ -112,21 +106,25 @@ export default function HomeScreen() {
         setRefreshing(false);
     }, []);
 
-    // Load on mount
     useEffect(() => {
         loadDashboardData();
     }, []);
 
-    // Reload when screen comes into focus
     useFocusEffect(
         useCallback(() => {
-            loadDashboardData(false);
+            setIsLoading(true);
+            loadDashboardData(false).finally(() => {
+                setTimeout(() => setIsLoading(false), 400);
+            });
         }, [])
     );
 
+    const handleOpenTransaction = (type: 'cash_in' | 'cash_out', accountId: string) => {
+        router.push(`/(tabs)/new-transaction?type=${type}&accountId=${accountId}`);
+    };
+
     return (
         <View style={styles.container}>
-            {/* App Header */}
             <AppHeader />
 
             <ScrollView
@@ -142,67 +140,66 @@ export default function HomeScreen() {
                     />
                 }
             >
-                {/* Page Header */}
                 <View style={styles.pageHeader}>
                     <Text style={styles.pageTitle}>Dashboard</Text>
                 </View>
 
-                {/* Sync Status Bar */}
                 <SyncStatusBar />
 
                 {isLoading ? (
                     <DashboardSkeleton />
                 ) : (
                     <View style={styles.content}>
-                        {/* Top Row: Total GCash & Cash on Hand */}
                         <View style={styles.topRow}>
                             <TouchableOpacity
-                                style={styles.card}
+                                style={[styles.card, styles.primaryCard]}
                                 onPress={() => setShowGcashModal(true)}
-                                activeOpacity={0.7}
+                                activeOpacity={0.78}
                             >
                                 <View style={styles.cardHeader}>
-                                    <Text style={styles.cardLabel}>Total GCash</Text>
+                                    <View>
+                                        <Text style={styles.cardLabel}>Total GCash</Text>
+                                        <Text style={styles.cardCaption}>Tap to view all accounts</Text>
+                                    </View>
                                     <View style={styles.infoIcon}>
-                                        <Text style={styles.infoIconText}>ⓘ</Text>
+                                        <Ionicons name="chevron-forward" size={16} color={COLORS.primary} />
                                     </View>
                                 </View>
-                                <Text style={styles.cardValue}>
-                                    ₱ {stats.totalGcash.toLocaleString()}
-                                </Text>
+
+                                <Text style={styles.cardValue}>P {stats.totalGcash.toLocaleString()}</Text>
+
+                                <View style={styles.cardMetaRow}>
+                                    <View style={styles.accountsBadge}>
+                                        <Text style={styles.accountsBadgeText}>{gcashAccounts.length} accounts</Text>
+                                    </View>
+                                    <Text style={styles.cardMetaText}>Quick actions inside sheet</Text>
+                                </View>
                             </TouchableOpacity>
 
-                            <View style={styles.card}>
+                            <View style={[styles.card, styles.secondaryCard]}>
                                 <Text style={styles.cardLabel}>Cash on Hand</Text>
-                                <Text style={styles.cardValue}>
-                                    ₱ {stats.cashOnHand.toLocaleString()}
-                                </Text>
+                                <Text style={styles.cardCaption}>Computed from local history</Text>
+                                <Text style={styles.cardValue}>P {stats.cashOnHand.toLocaleString()}</Text>
                             </View>
                         </View>
 
-                        {/* Total Capital */}
                         <View style={styles.wideCard}>
                             <Text style={styles.cardLabel}>Total Capital</Text>
-                            <Text style={styles.largeValue}>
-                                ₱ {stats.totalCapital.toLocaleString()}
-                            </Text>
+                            <Text style={styles.largeValue}>P {stats.totalCapital.toLocaleString()}</Text>
                         </View>
 
-                        {/* Tubo Today */}
                         <View style={styles.wideCard}>
                             <Text style={styles.cardLabel}>Tubo Today</Text>
                             <Text style={[styles.largeValue, { color: COLORS.success }]}>
-                                ₱ {stats.tuboToday.toLocaleString()}
+                                P {stats.tuboToday.toLocaleString()}
                             </Text>
                         </View>
                     </View>
                 )}
 
-                {/* Bottom spacing for tab bar */}
                 <View style={{ height: 24 }} />
             </ScrollView>
 
-            {/* GCash Accounts Modal */}
             <GCashAccountsModal
                 visible={showGcashModal}
                 accounts={gcashAccounts}
@@ -216,10 +213,9 @@ export default function HomeScreen() {
                     hour12: true,
                 })}
                 onClose={() => setShowGcashModal(false)}
+                onCashIn={(accountId) => handleOpenTransaction('cash_in', accountId)}
+                onCashOut={(accountId) => handleOpenTransaction('cash_out', accountId)}
             />
-
-            {/* Floating Action Button */}
-            <FloatingActionButton visible={canManageTransactions} />
         </View>
     );
 }
@@ -245,7 +241,7 @@ const styles = StyleSheet.create({
     },
     pageTitle: {
         fontSize: 24,
-        fontWeight: 'bold',
+        fontFamily: TYPOGRAPHY.bold,
         color: COLORS.textPrimary,
     },
     content: {
@@ -261,72 +257,108 @@ const styles = StyleSheet.create({
     card: {
         flex: 1,
         backgroundColor: COLORS.white,
-        borderRadius: 12,
-        padding: 16,
+        borderRadius: 18,
+        padding: 18,
         ...Platform.select({
             ios: {
                 shadowColor: COLORS.black,
-                shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: 0.1,
-                shadowRadius: 4,
+                shadowOffset: { width: 0, height: 8 },
+                shadowOpacity: 0.08,
+                shadowRadius: 14,
             },
             android: {
-                elevation: 2,
+                elevation: 3,
             },
             web: {
-                boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+                boxShadow: '0 10px 24px rgba(17, 24, 39, 0.08)',
             },
         }),
+    },
+    primaryCard: {
+        minHeight: 156,
+        justifyContent: 'space-between',
+    },
+    secondaryCard: {
+        minHeight: 156,
+        justifyContent: 'space-between',
     },
     cardHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 8,
+        alignItems: 'flex-start',
+        marginBottom: 14,
     },
     cardLabel: {
         fontSize: 12,
+        fontFamily: TYPOGRAPHY.medium,
         color: COLORS.textSecondary,
     },
+    cardCaption: {
+        marginTop: 4,
+        fontSize: 12,
+        fontFamily: TYPOGRAPHY.medium,
+        color: COLORS.textTertiary,
+    },
     infoIcon: {
-        width: 16,
-        height: 16,
-        borderRadius: 8,
+        width: 30,
+        height: 30,
+        borderRadius: 15,
+        backgroundColor: COLORS.primary + '14',
         alignItems: 'center',
         justifyContent: 'center',
     },
-    infoIconText: {
-        fontSize: 14,
+    cardValue: {
+        fontSize: 30,
+        fontFamily: TYPOGRAPHY.extraBold,
+        color: COLORS.textPrimary,
+    },
+    cardMetaRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 8,
+    },
+    accountsBadge: {
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        borderRadius: 999,
+        backgroundColor: COLORS.primary + '12',
+    },
+    accountsBadgeText: {
+        fontSize: 11,
+        fontFamily: TYPOGRAPHY.semibold,
         color: COLORS.primary,
     },
-    cardValue: {
-        fontSize: 18,
-        fontWeight: '600',
-        color: COLORS.textPrimary,
+    cardMetaText: {
+        flex: 1,
+        textAlign: 'right',
+        fontSize: 11,
+        fontFamily: TYPOGRAPHY.medium,
+        color: COLORS.textSecondary,
     },
     wideCard: {
         backgroundColor: COLORS.white,
-        borderRadius: 12,
-        padding: 16,
+        borderRadius: 18,
+        padding: 18,
         marginBottom: 16,
         ...Platform.select({
             ios: {
                 shadowColor: COLORS.black,
-                shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: 0.1,
-                shadowRadius: 4,
+                shadowOffset: { width: 0, height: 8 },
+                shadowOpacity: 0.08,
+                shadowRadius: 14,
             },
             android: {
-                elevation: 2,
+                elevation: 3,
             },
             web: {
-                boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+                boxShadow: '0 10px 24px rgba(17, 24, 39, 0.08)',
             },
         }),
     },
     largeValue: {
         fontSize: 24,
-        fontWeight: 'bold',
+        fontFamily: TYPOGRAPHY.bold,
         color: COLORS.textPrimary,
         marginTop: 4,
     },

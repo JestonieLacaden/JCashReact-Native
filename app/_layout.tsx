@@ -1,5 +1,14 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
+import {
+  Figtree_400Regular,
+  Figtree_500Medium,
+  Figtree_600SemiBold,
+  Figtree_700Bold,
+  Figtree_800ExtraBold,
+  useFonts,
+} from '@expo-google-fonts/figtree';
 import { Stack, useNavigationContainerRef, useRouter, useSegments } from 'expo-router';
+import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import 'react-native-reanimated';
@@ -12,6 +21,10 @@ export const unstable_settings = {
   anchor: '(tabs)',
 };
 
+SplashScreen.preventAutoHideAsync().catch(() => {
+  // Ignore repeated calls during fast refresh.
+});
+
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   const { isAuthenticated, loadUser, isLoading } = useAuthStore();
@@ -20,8 +33,14 @@ export default function RootLayout() {
   const navigationRef = useNavigationContainerRef();
   const [isNavigationReady, setIsNavigationReady] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [fontsLoaded] = useFonts({
+    Figtree_400Regular,
+    Figtree_500Medium,
+    Figtree_600SemiBold,
+    Figtree_700Bold,
+    Figtree_800ExtraBold,
+  });
 
-  // Initialize database and load user on mount
   useEffect(() => {
     const init = async () => {
       try {
@@ -33,13 +52,12 @@ export default function RootLayout() {
         setIsInitialized(true);
       } catch (error) {
         console.error('[RootLayout] Error initializing app:', error);
-        setIsInitialized(true); // Set true even on error to allow navigation
+        setIsInitialized(true);
       }
     };
     init();
-  }, []);
+  }, [loadUser]);
 
-  // Wait for navigation to be ready
   useEffect(() => {
     if (navigationRef?.current) {
       setIsNavigationReady(true);
@@ -49,7 +67,6 @@ export default function RootLayout() {
       setIsNavigationReady(true);
     });
 
-    // Set ready after a delay as fallback
     const timer = setTimeout(() => {
       console.log('[RootLayout] Navigation ready timeout triggered');
       setIsNavigationReady(true);
@@ -61,7 +78,6 @@ export default function RootLayout() {
     };
   }, [navigationRef]);
 
-  // Handle authentication routing - only when ready
   useEffect(() => {
     if (!isNavigationReady || !isInitialized || isLoading) {
       console.log('[RootLayout] Waiting...', { isNavigationReady, isInitialized, isLoading });
@@ -79,7 +95,19 @@ export default function RootLayout() {
       console.log('[RootLayout] Redirecting to home...');
       router.replace('/(tabs)');
     }
-  }, [isAuthenticated, segments, isNavigationReady, isInitialized, isLoading]);
+  }, [isAuthenticated, isInitialized, isLoading, isNavigationReady, router, segments]);
+
+  useEffect(() => {
+    if (fontsLoaded) {
+      SplashScreen.hideAsync().catch(() => {
+        // Ignore if already hidden.
+      });
+    }
+  }, [fontsLoaded]);
+
+  if (!fontsLoaded) {
+    return null;
+  }
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
@@ -110,7 +138,6 @@ export default function RootLayout() {
             presentation: 'card'
           }}
         />
-
         <Stack.Screen
           name="transfer"
           options={{

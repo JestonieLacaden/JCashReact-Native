@@ -9,7 +9,10 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "This app uses the camera to scan QR codes for data synchronization."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -19,7 +22,10 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.hapon.jcashmobile",
+      "googleServicesFile": "./android/app/google-services.json",
+      "permissions": ["android.permission.CAMERA"]
     },
     "web": {
       "bundler": "metro",
@@ -40,6 +46,15 @@
           }
         }
       ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow JCash to access camera for QR code scanning."
+        }
+      ],
+      "@react-native-firebase/app",
+      "@react-native-firebase/auth",
+      "@react-native-google-signin/google-signin",
       "expo-sqlite"
     ],
     "experiments": {

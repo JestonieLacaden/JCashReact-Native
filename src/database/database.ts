@@ -93,6 +93,85 @@ function runMigrations() {
       console.log("[Database] ✅ Added conflict_resolved column");
     }
 
+    // Migration 5: Ensure ALL tables have correct schemas
+    // Check each table for required columns; if any are missing, drop and recreate
+    const tablesToCheck: Record<string, string[]> = {
+      users: [
+        "id",
+        "name",
+        "email",
+        "username",
+        "password",
+        "role",
+        "device_id",
+      ],
+      gcash_accounts: [
+        "id",
+        "name",
+        "number",
+        "type",
+        "is_active",
+        "created_by_device_id",
+      ],
+      transactions: [
+        "id",
+        "type",
+        "gcash_account_id",
+        "amount",
+        "fee",
+        "discounted",
+        "status",
+        "reference",
+        "receiver_name",
+        "customer_phone",
+        "created_by_user_id",
+        "created_by_device_id",
+        "is_synced",
+        "conflict_resolved",
+      ],
+      starting_balances: [
+        "id",
+        "cash_wallet_balance",
+        "gcash_account_id",
+        "gcash_balance",
+        "effective_date",
+        "created_by_user_id",
+      ],
+      fee_settings: [
+        "id",
+        "below_500_fee",
+        "five_hundred_to_999_fee",
+        "per_1000_fee",
+        "discounted_per_1000_fee",
+      ],
+    };
+
+    for (const [tableName, requiredCols] of Object.entries(tablesToCheck)) {
+      const tableExists = db.getFirstSync(
+        `SELECT name FROM sqlite_master WHERE type='table' AND name='${tableName}'`,
+      );
+      if (!tableExists) continue;
+
+      let needsRecreate = false;
+      for (const col of requiredCols) {
+        try {
+          db.getFirstSync(`SELECT ${col} FROM ${tableName} LIMIT 1`);
+        } catch (e) {
+          console.log(`[Database] ${tableName} table missing column: ${col}`);
+          needsRecreate = true;
+          break;
+        }
+      }
+
+      if (needsRecreate) {
+        console.log(
+          `[Database] ${tableName} table schema is outdated, dropping...`,
+        );
+        db.execSync(`DROP TABLE IF EXISTS ${tableName}`);
+        console.log(`[Database] ✅ Old ${tableName} table dropped`);
+      }
+    }
+
     console.log("[Database] Migrations completed successfully");
   } catch (error) {
     console.error("[Database] Migration error:", error);
@@ -231,6 +310,13 @@ export function initializeDatabase() {
     `);
 
     console.log("✅ Database initialized successfully");
+
+    // Auto-seed if no users exist (for fresh installs or after migration)
+    const userCount = db.getFirstSync("SELECT COUNT(*) as count FROM users");
+    if (userCount.count === 0) {
+      console.log("[Database] No users found, seeding database...");
+      seedDatabase();
+    }
   } catch (error) {
     console.error("❌ Database initialization error:", error);
     throw error;

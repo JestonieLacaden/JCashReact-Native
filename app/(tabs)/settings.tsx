@@ -82,7 +82,7 @@ export default function SettingsScreen() {
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>Database Management</Text>
                     <Text style={styles.sectionDescription}>
-                        Use these options if you're experiencing database errors or schema issues.
+                        Use these options if you&apos;re experiencing database errors or schema issues.
                     </Text>
 
                     {/* Rebuild Database Button */}
@@ -242,3 +242,4 @@ const styles = StyleSheet.create({
         color: COLORS.textPrimary,
     },
 });
+

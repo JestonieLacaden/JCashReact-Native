@@ -1,10 +1,10 @@
 /**
  * QR SCANNER SCREEN
- * 
- * Scans QR code from another device and imports sync data
+ *
+ * Scans QR code from another device and imports sync data.
  */
 
-import { BarCodeScanner } from 'expo-barcode-scanner';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
@@ -20,20 +20,17 @@ import { QRSyncService } from '../services/QRSyncService';
 
 export default function QRScannerScreen() {
     const router = useRouter();
-    const [hasPermission, setHasPermission] = useState<boolean | null>(null);
+    const [permission, requestPermission] = useCameraPermissions();
     const [scanned, setScanned] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
 
     useEffect(() => {
-        requestCameraPermission();
-    }, []);
+        if (!permission) {
+            requestPermission();
+        }
+    }, [permission, requestPermission]);
 
-    const requestCameraPermission = async () => {
-        const { status } = await BarCodeScanner.requestPermissionsAsync();
-        setHasPermission(status === 'granted');
-    };
-
-    const handleBarCodeScanned = async ({ type, data }: { type: string; data: string }) => {
+    const handleBarCodeScanned = async ({ data }: { type: string; data: string }) => {
         if (scanned || isProcessing) return;
 
         setScanned(true);
@@ -45,23 +42,23 @@ export default function QRScannerScreen() {
 
             if (result.success) {
                 Alert.alert(
-                    'Sync Successful! ✅',
+                    'Sync Successful',
                     result.message + '\n\n' +
                     (result.stats ? `
-• ${result.stats.transactions_imported} new transactions
-• ${result.stats.accounts_updated} accounts updated
-• ${result.stats.conflicts_resolved} conflicts resolved
+- ${result.stats.transactions_imported} new transactions
+- ${result.stats.accounts_updated} accounts updated
+- ${result.stats.conflicts_resolved} conflicts resolved
                     `.trim() : ''),
                     [
                         {
                             text: 'OK',
-                            onPress: () => router.back()
-                        }
-                    ]
+                            onPress: () => router.back(),
+                        },
+                    ],
                 );
             } else {
                 Alert.alert(
-                    'Sync Failed ❌',
+                    'Sync Failed',
                     result.message,
                     [
                         {
@@ -69,14 +66,14 @@ export default function QRScannerScreen() {
                             onPress: () => {
                                 setScanned(false);
                                 setIsProcessing(false);
-                            }
+                            },
                         },
                         {
                             text: 'Cancel',
                             onPress: () => router.back(),
-                            style: 'cancel'
-                        }
-                    ]
+                            style: 'cancel',
+                        },
+                    ],
                 );
             }
         } catch (error) {
@@ -90,21 +87,21 @@ export default function QRScannerScreen() {
                         onPress: () => {
                             setScanned(false);
                             setIsProcessing(false);
-                        }
+                        },
                     },
                     {
                         text: 'Cancel',
                         onPress: () => router.back(),
-                        style: 'cancel'
-                    }
-                ]
+                        style: 'cancel',
+                    },
+                ],
             );
         } finally {
             setIsProcessing(false);
         }
     };
 
-    if (hasPermission === null) {
+    if (!permission) {
         return (
             <View style={styles.container}>
                 <View style={styles.messageContainer}>
@@ -114,12 +111,12 @@ export default function QRScannerScreen() {
         );
     }
 
-    if (hasPermission === false) {
+    if (!permission.granted) {
         return (
             <View style={styles.container}>
                 <View style={styles.appHeader}>
                     <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-                        <Text style={styles.backButtonText}>←</Text>
+                        <Text style={styles.backButtonText}>Back</Text>
                     </TouchableOpacity>
                     <Text style={styles.appHeaderTitle}>Scan QR Code</Text>
                     <View style={styles.placeholder} />
@@ -132,7 +129,7 @@ export default function QRScannerScreen() {
                     </Text>
                     <TouchableOpacity
                         style={styles.primaryButton}
-                        onPress={requestCameraPermission}
+                        onPress={requestPermission}
                     >
                         <Text style={styles.primaryButtonText}>Grant Permission</Text>
                     </TouchableOpacity>
@@ -143,23 +140,22 @@ export default function QRScannerScreen() {
 
     return (
         <View style={styles.container}>
-            {/* App Header */}
             <View style={styles.appHeader}>
                 <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-                    <Text style={styles.backButtonText}>←</Text>
+                    <Text style={styles.backButtonText}>Back</Text>
                 </TouchableOpacity>
                 <Text style={styles.appHeaderTitle}>Scan QR Code</Text>
                 <View style={styles.placeholder} />
             </View>
 
-            {/* Camera Scanner */}
             <View style={styles.scannerContainer}>
-                <BarCodeScanner
-                    onBarCodeScanned={scanned ? undefined : handleBarCodeScanned}
+                <CameraView
+                    barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
+                    facing="back"
+                    onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
                     style={StyleSheet.absoluteFillObject}
                 />
 
-                {/* Scanning Frame */}
                 <View style={styles.scanFrame}>
                     <View style={[styles.corner, styles.cornerTopLeft]} />
                     <View style={[styles.corner, styles.cornerTopRight]} />
@@ -167,17 +163,15 @@ export default function QRScannerScreen() {
                     <View style={[styles.corner, styles.cornerBottomRight]} />
                 </View>
 
-                {/* Instructions */}
                 <View style={styles.instructionsContainer}>
                     <Text style={styles.instructionsText}>
                         {isProcessing ? 'Processing QR code...' :
-                            scanned ? 'QR code scanned!' :
+                            scanned ? 'QR code scanned' :
                                 'Point camera at QR code'}
                     </Text>
                 </View>
             </View>
 
-            {/* Manual Reset Button */}
             {scanned && !isProcessing && (
                 <View style={styles.bottomActions}>
                     <TouchableOpacity
@@ -211,8 +205,9 @@ const styles = StyleSheet.create({
         padding: 8,
     },
     backButtonText: {
-        fontSize: 24,
+        fontSize: 16,
         color: COLORS.white,
+        fontWeight: '600',
     },
     appHeaderTitle: {
         fontSize: 18,
@@ -220,7 +215,7 @@ const styles = StyleSheet.create({
         color: COLORS.white,
     },
     placeholder: {
-        width: 40,
+        width: 56,
     },
     scannerContainer: {
         flex: 1,
